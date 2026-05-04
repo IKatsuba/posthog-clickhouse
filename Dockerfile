@@ -1,3 +1,4 @@
+# https://github.com/IKatsuba/posthog-clickhouse
 # syntax=docker/dockerfile:1.7
 
 # PostHog ClickHouse image for Railway template.
