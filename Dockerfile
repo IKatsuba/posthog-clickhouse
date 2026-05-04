@@ -59,3 +59,4 @@ RUN chmod -R +x /var/lib/clickhouse/user_scripts && \
 # Ports inherited from base image (8123 HTTP, 9000 native)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD wget -qO- http://localhost:8123/ping || exit 1
+
