@@ -1,0 +1,78 @@
+name: Build & publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .github/workflows/build.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - .github/workflows/build.yml
+  workflow_dispatch:
+    inputs:
+      clickhouse_version:
+        description: ClickHouse version (matches base image tag)
+        required: false
+        default: 26.3.9.8
+      posthog_sha:
+        description: PostHog commit SHA to pull configs from
+        required: false
+        default: 70c912d5b7b94cf8930e376986b1e4bedb1f4bfb
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve build args
+        id: args
+        run: |
+          CH_VERSION="${{ github.event.inputs.clickhouse_version }}"
+          PH_SHA="${{ github.event.inputs.posthog_sha }}"
+          if [ -z "$CH_VERSION" ]; then
+            CH_VERSION=$(grep -E '^ARG CLICKHOUSE_VERSION=' Dockerfile | cut -d= -f2)
+          fi
+          if [ -z "$PH_SHA" ]; then
+            PH_SHA=$(grep -E '^ARG POSTHOG_SHA=' Dockerfile | cut -d= -f2)
+          fi
+          PH_SHORT="${PH_SHA:0:7}"
+          echo "ch=$CH_VERSION" >> "$GITHUB_OUTPUT"
+          echo "ph_full=$PH_SHA" >> "$GITHUB_OUTPUT"
+          echo "ph_short=$PH_SHORT" >> "$GITHUB_OUTPUT"
+          echo "Building CH=$CH_VERSION POSTHOG=$PH_SHORT ($PH_SHA)"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          build-args: |
+            CLICKHOUSE_VERSION=${{ steps.args.outputs.ch }}
+            POSTHOG_SHA=${{ steps.args.outputs.ph_full }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/posthog-clickhouse:${{ steps.args.outputs.ch }}-${{ steps.args.outputs.ph_short }}
+            ghcr.io/${{ github.repository_owner }}/posthog-clickhouse:ch-${{ steps.args.outputs.ch }}
+            ghcr.io/${{ github.repository_owner }}/posthog-clickhouse:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

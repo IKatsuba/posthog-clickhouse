@@ -1,0 +1,54 @@
+name: Bump PostHog SHA
+
+on:
+  schedule:
+    # Mondays 09:00 UTC — pick up new PostHog releases
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest PostHog master SHA
+        id: ph
+        run: |
+          LATEST_SHA=$(curl -sSf https://api.github.com/repos/PostHog/posthog/commits/master \
+                       | jq -r .sha)
+          if [ -z "$LATEST_SHA" ] || [ "$LATEST_SHA" = "null" ]; then
+            echo "Failed to resolve PostHog SHA" >&2
+            exit 1
+          fi
+          CURRENT=$(grep -E '^ARG POSTHOG_SHA=' Dockerfile | cut -d= -f2)
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST_SHA" >> "$GITHUB_OUTPUT"
+          echo "short=${LATEST_SHA:0:7}" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT" = "$LATEST_SHA" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update Dockerfile
+        if: steps.ph.outputs.skip != 'true'
+        run: |
+          sed -i "s|^ARG POSTHOG_SHA=.*$|ARG POSTHOG_SHA=${{ steps.ph.outputs.latest }}|" Dockerfile
+
+      - name: Open PR
+        if: steps.ph.outputs.skip != 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: bot/bump-posthog-${{ steps.ph.outputs.short }}
+          title: 'Bump PostHog SHA → ${{ steps.ph.outputs.short }}'
+          commit-message: 'Bump PostHog SHA to ${{ steps.ph.outputs.short }}'
+          body: |
+            Auto-bump PostHog SHA from `${{ steps.ph.outputs.current }}` to `${{ steps.ph.outputs.latest }}`.
+
+            See changelog: https://github.com/PostHog/posthog/compare/${{ steps.ph.outputs.current }}...${{ steps.ph.outputs.latest }}
+
+            Merge to trigger image rebuild & push.
+          delete-branch: true
