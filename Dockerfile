@@ -55,6 +55,22 @@ COPY --from=source /tmp/posthog/posthog/idl \
 RUN sed -i 's|<host>clickhouse</host>|<host from_env="CLICKHOUSE_INTERNAL_HOST"/>|g' \
         /etc/clickhouse-server/config.d/default.xml
 
+# Grant the runtime-created posthog user access to named_collections — PostHog
+# defines msk_cluster / warpstream_* and ClickHouse 26.x requires an explicit
+# NAMED COLLECTION grant to use them in Storage = Kafka tables.
+RUN cat > /etc/clickhouse-server/users.d/posthog-named-collections.xml <<'XML'
+<clickhouse>
+    <users>
+        <posthog>
+            <access_management>1</access_management>
+            <named_collection_control>1</named_collection_control>
+            <show_named_collections>1</show_named_collections>
+            <show_named_collections_secrets>1</show_named_collections_secrets>
+        </posthog>
+    </users>
+</clickhouse>
+XML
+
 # Listen on IPv6 (and IPv4 via dual-stack) — Railway's private network is IPv6-only.
 RUN printf '<clickhouse><listen_host>::</listen_host></clickhouse>\n' \
       > /etc/clickhouse-server/config.d/listen.xml
