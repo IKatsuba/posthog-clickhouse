@@ -75,18 +75,27 @@ XML
 RUN printf '<clickhouse><listen_host>::</listen_host></clickhouse>\n' \
       > /etc/clickhouse-server/config.d/listen.xml
 
-# PostHog migration 0159 creates a view over system.crash_log; that table is
-# created lazily on first crash, so eager-create it on startup.
-RUN cat > /etc/clickhouse-server/config.d/crash-log.xml <<'XML'
-<clickhouse>
-    <crash_log>
-        <database>system</database>
-        <table>crash_log</table>
-        <partition_by>toYYYYMM(event_date)</partition_by>
-        <flush_interval_milliseconds>1000</flush_interval_milliseconds>
-    </crash_log>
-</clickhouse>
-XML
+# PostHog migration 0159 creates a view over system.crash_log; ClickHouse
+# only materialises that table on first crash. Pre-create it via init script
+# so the migration succeeds on a clean cluster.
+RUN cat > /docker-entrypoint-initdb.d/00-crash-log.sql <<'SQL'
+CREATE TABLE IF NOT EXISTS system.crash_log (
+    hostname LowCardinality(String),
+    event_date Date,
+    event_time DateTime,
+    timestamp_ns UInt64,
+    signal Int32,
+    thread_id UInt64,
+    query_id String,
+    trace Array(UInt64),
+    trace_full Array(String),
+    version String,
+    revision UInt32,
+    build_id String
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(event_date)
+ORDER BY (event_date, event_time);
+SQL
 
 # Embedded clickhouse-keeper. PostHog requires a Zookeeper-compatible quorum
 # for Replicated* tables; running keeper inside the same process avoids a
