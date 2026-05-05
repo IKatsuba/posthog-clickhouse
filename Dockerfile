@@ -48,9 +48,11 @@ COPY --from=source /tmp/posthog/posthog/idl \
                    /idl
 
 # Cluster topology in PostHog's compose hardcodes host=clickhouse (their service name).
-# Replace with localhost so single-node deployments (Railway, bare docker run) start clean.
-# In a multi-node setup, override config.d/default.xml at runtime via volume mount.
-RUN sed -i 's|<host>clickhouse</host>|<host>localhost</host>|g' \
+# Read the externally-reachable hostname from CLICKHOUSE_INTERNAL_HOST so the
+# `system.clusters` entries point clients (Web, Worker, Migrate) at the right
+# address. Default to `localhost` when the env var is unset (single-node /
+# `docker run` with no networking).
+RUN sed -i 's|<host>clickhouse</host>|<host from_env="CLICKHOUSE_INTERNAL_HOST"/>|g' \
         /etc/clickhouse-server/config.d/default.xml
 
 # Listen on IPv6 (and IPv4 via dual-stack) — Railway's private network is IPv6-only.
