@@ -57,6 +57,38 @@ RUN sed -i 's|<host>clickhouse</host>|<host>localhost</host>|g' \
 RUN printf '<clickhouse><listen_host>::</listen_host></clickhouse>\n' \
       > /etc/clickhouse-server/config.d/listen.xml
 
+# Embedded clickhouse-keeper. PostHog requires a Zookeeper-compatible quorum
+# for Replicated* tables; running keeper inside the same process avoids a
+# second container in single-node Railway deployments.
+RUN cat > /etc/clickhouse-server/config.d/keeper.xml <<'XML'
+<clickhouse>
+    <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>warning</raft_logs_level>
+        </coordination_settings>
+        <raft_configuration>
+            <server>
+                <id>1</id>
+                <hostname>localhost</hostname>
+                <port>9234</port>
+            </server>
+        </raft_configuration>
+    </keeper_server>
+    <zookeeper>
+        <node>
+            <host>localhost</host>
+            <port>9181</port>
+        </node>
+    </zookeeper>
+</clickhouse>
+XML
+
 # Make user_scripts executable (host bind mounts already are; built-in COPY needs explicit)
 RUN chmod -R +x /var/lib/clickhouse/user_scripts && \
     chown -R clickhouse:clickhouse /var/lib/clickhouse/user_scripts /idl
