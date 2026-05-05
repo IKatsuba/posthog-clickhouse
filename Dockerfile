@@ -53,6 +53,10 @@ COPY --from=source /tmp/posthog/posthog/idl \
 RUN sed -i 's|<host>clickhouse</host>|<host>localhost</host>|g' \
         /etc/clickhouse-server/config.d/default.xml
 
+# Listen on IPv6 (and IPv4 via dual-stack) — Railway's private network is IPv6-only.
+RUN printf '<clickhouse><listen_host>::</listen_host></clickhouse>\n' \
+      > /etc/clickhouse-server/config.d/listen.xml
+
 # Make user_scripts executable (host bind mounts already are; built-in COPY needs explicit)
 RUN chmod -R +x /var/lib/clickhouse/user_scripts && \
     chown -R clickhouse:clickhouse /var/lib/clickhouse/user_scripts /idl
