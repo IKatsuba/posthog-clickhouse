@@ -75,6 +75,19 @@ XML
 RUN printf '<clickhouse><listen_host>::</listen_host></clickhouse>\n' \
       > /etc/clickhouse-server/config.d/listen.xml
 
+# PostHog migration 0159 creates a view over system.crash_log; that table is
+# created lazily on first crash, so eager-create it on startup.
+RUN cat > /etc/clickhouse-server/config.d/crash-log.xml <<'XML'
+<clickhouse>
+    <crash_log>
+        <database>system</database>
+        <table>crash_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <flush_interval_milliseconds>1000</flush_interval_milliseconds>
+    </crash_log>
+</clickhouse>
+XML
+
 # Embedded clickhouse-keeper. PostHog requires a Zookeeper-compatible quorum
 # for Replicated* tables; running keeper inside the same process avoids a
 # second container in single-node Railway deployments.
