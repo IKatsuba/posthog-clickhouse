@@ -7,7 +7,7 @@
 # the official ClickHouse server image.
 
 ARG CLICKHOUSE_VERSION=26.3.9.8
-ARG POSTHOG_SHA=70c912d5b7b94cf8930e376986b1e4bedb1f4bfb
+ARG POSTHOG_SHA=68033007666aedf764466b604aea06a2882c12be
 
 # ---------- stage 1: fetch PostHog config files ----------
 FROM alpine/git:2.45.2 AS source
